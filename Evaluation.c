@@ -13,6 +13,47 @@ int evaluateExpr(Expression *expr) {
     // code d'initialisation
     first = 0;
   }
+  //redirections  
+  if (expr->type == ET_REDIRECT) {
+    int status;
+    //redirection de "input"
+      //On verifie si c'est pas la redirection simultanée 
+      if (!expr->redirect.toOtherFd) {
+        if (expr->redirect.type == REDIR_IN) {
+          pid_t pid;
+          if ((pid = fork()) < 0) {
+            perror("fork");
+            exit(EXIT_FAILURE);
+          } //pere attend son fils
+          else if (pid > 0) {
+            if (waitpid(pid, &status,0) != pid) {
+              perror("waitpid");
+              exit(EXIT_FAILURE);
+            }
+            //Il faut modifier le shellStatus en utilisant les macros definis en <sys/wait.h>
+            if (WIFEXITED(status)) {
+              shellStatus = WEXITSTATUS(status);
+            } else {  
+              shellStatus = 1;
+            }
+            return shellStatus;
+          } //fils fait la redirection 
+          else {
+            //redirection de "input" pour liser de fileName
+            int fd_to_redirect = open(expr->redirect.fileName, O_RDONLY);
+            if (fd_to_redirect < 0) {
+              perror("open");
+            } 
+            dup2(fd_to_redirect, STDIN_FILENO);
+            close(fd_to_redirect);
+            //execute la commande avec "input" redirecté
+            evaluateExpr(expr->left);
+            exit(EXIT_SUCCESS);
+          } //parent attend pour la termination et retorne le status 
+        }
+      }
+
+  }
   //executer une commande externe simple donc le type d'expr est ET_SIMPLE
   if (expr->type == ET_SIMPLE) {
     int status;
@@ -23,12 +64,12 @@ int evaluateExpr(Expression *expr) {
     //Il faut conserver le shell donc il faut creer un processus fils
     pid_t pid;
     if ((pid = fork()) < 0) {
-      perror("fork error");
+      perror("fork");
       exit(EXIT_FAILURE);
     } else if (pid > 0) {
       //processus pere attendra la termination de son fils et recupere le "exit status"
-      if (waitpid(pid, &status, 0) != pid ) {
-        fprintf(stderr, "waitpid error\n"); 
+      if (waitpid(pid, &status, 0) != pid) {
+        perror("waitpid"); 
         exit(EXIT_FAILURE);
       }
     } //processus fils 
