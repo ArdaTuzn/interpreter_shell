@@ -1,0 +1,56 @@
+# --- General build outputs ---
+*.o
+*.out
+*.a
+*.so
+*.exe
+*.out
+*.dSYM/
+*.swp
+*.swo
+*~
+
+# --- Yacc/Bison and Lex/Flex generated files ---
+y.tab.c
+y.tab.h
+y.output
+lex.yy.c
+lex.yy.h
+
+# --- Compiled binaries / executables ---
+Shell
+interpreter_shell
+a.out
+
+# --- Makefile build artifacts ---
+*.tmp
+*.log
+*.bak
+*.pid
+*.run
+
+# --- User / environment files ---
+.vscode/
+.idea/
+*.code-workspace
+
+# --- Files created by root (su) or system processes ---
+/root/
+*.lock
+*.sock
+*.pid
+*.cache
+*.swp
+*.swo
+*.core
+
+# --- System / temporary files ---
+/tmp/
+*.tmp
+*.~*
+*.bak
+*.old
+
+# --- Unrelated to Git ---
+.DS_Store
+Thumbs.db
