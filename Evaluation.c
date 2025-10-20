@@ -50,13 +50,12 @@ int evaluateExpr(Expression *expr) {
               exit(EXIT_FAILURE);
             };
             close(fd_to_redirect);
-            //execute la commande avec "input" redirecté
+            //execute la commande avec "input" redirecté et la gauche de < donné en argument
             evaluateExpr(expr->left);
             exit(EXIT_SUCCESS);
           } 
         }
       }
-
   }
   //executer une commande externe simple donc le type d'expr est ET_SIMPLE
   if (expr->type == ET_SIMPLE) {
