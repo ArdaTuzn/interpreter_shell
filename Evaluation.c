@@ -16,7 +16,7 @@ int evaluateExpr(Expression *expr) {
   //redirections  
   if (expr->type == ET_REDIRECT) {
     int status;
-    //redirection de "input"
+    //redirection de "input et output"
       //On verifie si c'est pas la redirection simultanée 
       if (!expr->redirect.toOtherFd) {
         pid_t pid;
@@ -61,7 +61,7 @@ int evaluateExpr(Expression *expr) {
         else if (expr->redirect.type == REDIR_OUT) {
           if (pid == 0) {
             //redirection de "output" pour ecrire a fileName
-            int fd_to_redirect = open(expr->redirect.fileName, O_RDONLY);
+            int fd_to_redirect = open(expr->redirect.fileName, O_WRONLY);
             if (fd_to_redirect < 0) {
               perror("open");
             } 
@@ -77,6 +77,7 @@ int evaluateExpr(Expression *expr) {
           } 
         }
       }
+    
   }
   //executer une commande externe simple donc le type d'expr est ET_SIMPLE
   if (expr->type == ET_SIMPLE) {
