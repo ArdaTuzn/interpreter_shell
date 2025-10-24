@@ -19,26 +19,29 @@ int evaluateExpr(Expression *expr) {
     //redirection de "input"
       //On verifie si c'est pas la redirection simultanée 
       if (!expr->redirect.toOtherFd) {
-        if (expr->redirect.type == REDIR_IN) {
-          pid_t pid;
-          if ((pid = fork()) < 0) {
-            perror("fork");
+        pid_t pid;
+        if ((pid = fork()) < 0) {
+          perror("fork");
+          exit(EXIT_FAILURE);
+        }
+        //parent attend pour la termination et retourne le status 
+        if (pid > 0) {
+          if (waitpid(pid, &status,0) != pid) {
+            perror("waitpid");
             exit(EXIT_FAILURE);
-          } //parent attend pour la termination et retourne le status 
-          else if (pid > 0) {
-            if (waitpid(pid, &status,0) != pid) {
-              perror("waitpid");
-              exit(EXIT_FAILURE);
-            }
-            //Il faut modifier le shellStatus en utilisant les macros definis en <sys/wait.h>
-            if (WIFEXITED(status)) {
-              shellStatus = WEXITSTATUS(status);
-            } else {  
-              shellStatus = 1;
-            }
-            return shellStatus;
-          } //fils fait la redirection 
-          else {
+          }
+        //Il faut modifier le shellStatus en utilisant les macros definis en <sys/wait.h>
+        if (WIFEXITED(status)) {
+          shellStatus = WEXITSTATUS(status);
+          } else {  
+            shellStatus = 1;
+          }
+          return shellStatus;
+        }
+        //On a deja verifie si c'est pas la redirection simultanée donc REDIR_IN est <
+        if (expr->redirect.type == REDIR_IN) {
+          //fils fait la redirection 
+          if (pid == 0) {
             //redirection de "input" pour liser de fileName
             int fd_to_redirect = open(expr->redirect.fileName, O_RDONLY);
             if (fd_to_redirect < 0) {
@@ -50,7 +53,25 @@ int evaluateExpr(Expression *expr) {
               exit(EXIT_FAILURE);
             };
             close(fd_to_redirect);
-            //execute la commande avec "input" redirecté et la gauche de < donné en argument
+            //execute la commande avec "input" redirecté et l'expression a gauche de < comme argument
+            evaluateExpr(expr->left);
+            exit(EXIT_SUCCESS);
+          } 
+        } 
+        else if (expr->redirect.type == REDIR_OUT) {
+          if (pid == 0) {
+            //redirection de "output" pour ecrire a fileName
+            int fd_to_redirect = open(expr->redirect.fileName, O_RDONLY);
+            if (fd_to_redirect < 0) {
+              perror("open");
+            } 
+            if (dup2(fd_to_redirect, STDOUT_FILENO) < 0) {
+              perror("dup2");
+              close(fd_to_redirect);
+              exit(EXIT_FAILURE);
+            };
+            close(fd_to_redirect);
+            //execute la commande avec "output" redirecté et l'expression a gauche de > comme argument
             evaluateExpr(expr->left);
             exit(EXIT_SUCCESS);
           } 
