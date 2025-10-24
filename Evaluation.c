@@ -16,7 +16,7 @@ int evaluateExpr(Expression *expr) {
   //redirections  
   if (expr->type == ET_REDIRECT) {
     int status;
-    //redirection de "input et output"
+    //redirection de "input,output et prolongation"
       //On verifie si c'est pas la redirection simultanée 
       if (!expr->redirect.toOtherFd) {
         pid_t pid;
@@ -59,8 +59,10 @@ int evaluateExpr(Expression *expr) {
           } 
         } 
         else if (expr->redirect.type == REDIR_OUT) {
+          //fils fait la redirection 
           if (pid == 0) {
-            //redirection de "output" pour ecrire a fileName
+            //redirection de "output" pour ecrire a fileName, si le fichier a ecrire n'existe pas, le creer, s'il existe deja,
+            //effacer son contenu
             int fd_to_redirect = open(expr->redirect.fileName, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (fd_to_redirect < 0) {
               perror("open");
@@ -76,7 +78,28 @@ int evaluateExpr(Expression *expr) {
             exit(EXIT_SUCCESS);
           } 
         }
+        else if (expr->redirect.type == REDIR_APP) {
+          //fils fait la redirection 
+          if (pid == 0) {
+            //redirection de "output" pour ecrire a fileName, si le fichier a ecrire n'existe pas, le creer, s'il existe deja,
+            //il faut garder le contenu et ecrire apres le fin, donc on utilise le flag O_APPEND au lieu de O_TRUNC qui efface 
+            int fd_to_redirect = open(expr->redirect.fileName, O_WRONLY | O_CREAT | O_APPEND, 0644);
+            if (fd_to_redirect < 0) {
+              perror("open");
+            } 
+            if (dup2(fd_to_redirect, STDOUT_FILENO) < 0) {
+              perror("dup2");
+              close(fd_to_redirect);
+              exit(EXIT_FAILURE);
+            };
+            close(fd_to_redirect);
+            //execute la commande avec "output" redirecté et l'expression a gauche de >> comme argument
+            evaluateExpr(expr->left);
+            exit(EXIT_SUCCESS);
+          }
+        }
       }
+
     
   }
   //executer une commande externe simple donc le type d'expr est ET_SIMPLE
@@ -111,5 +134,5 @@ int evaluateExpr(Expression *expr) {
     }
     return shellStatus;
   }
-
+  return 0;
 }
