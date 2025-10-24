@@ -61,7 +61,7 @@ int evaluateExpr(Expression *expr) {
         else if (expr->redirect.type == REDIR_OUT) {
           if (pid == 0) {
             //redirection de "output" pour ecrire a fileName
-            int fd_to_redirect = open(expr->redirect.fileName, O_WRONLY);
+            int fd_to_redirect = open(expr->redirect.fileName, O_WRONLY | O_CREAT | O_TRUNC, 0644);
             if (fd_to_redirect < 0) {
               perror("open");
             } 
