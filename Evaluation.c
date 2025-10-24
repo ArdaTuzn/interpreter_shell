@@ -16,30 +16,30 @@ int evaluateExpr(Expression *expr) {
   //redirections  
   if (expr->type == ET_REDIRECT) {
     int status;
-    //redirection de "input,output et prolongation"
+    pid_t pid;
+    if ((pid = fork()) < 0) {
+      perror("fork");
+      exit(EXIT_FAILURE);
+    }
+    if (pid > 0) {
+      //parent attend pour la termination et retourne le status 
+      if (waitpid(pid, &status,0) != pid) {
+          perror("waitpid");
+          exit(EXIT_FAILURE);
+      }
+      //Il faut modifier le shellStatus en utilisant les macros definis en <sys/wait.h>
+      if (WIFEXITED(status)) {
+        shellStatus = WEXITSTATUS(status);
+      } else {  
+        shellStatus = 1;
+      }
+      return shellStatus;
+    }
+    //redirection de "input,output et prolongation" (c'est le fils qui le fait car parent est en attente)
       //On verifie si c'est pas la redirection simultanée 
       if (!expr->redirect.toOtherFd) {
-        pid_t pid;
-        if ((pid = fork()) < 0) {
-          perror("fork");
-          exit(EXIT_FAILURE);
-        }
-        //parent attend pour la termination et retourne le status 
-        if (pid > 0) {
-          if (waitpid(pid, &status,0) != pid) {
-            perror("waitpid");
-            exit(EXIT_FAILURE);
-          }
-        //Il faut modifier le shellStatus en utilisant les macros definis en <sys/wait.h>
-        if (WIFEXITED(status)) {
-          shellStatus = WEXITSTATUS(status);
-          } else {  
-            shellStatus = 1;
-          }
-          return shellStatus;
-        }
         //On a deja verifie si c'est pas la redirection simultanée donc REDIR_IN est <
-        if (expr->redirect.type == REDIR_IN) {
+        if (expr->redirect.type == REDIR_IN && expr->redirect.fd != -1) {
           //fils fait la redirection 
           if (pid == 0) {
             //redirection de "input" pour liser de fileName
@@ -58,7 +58,7 @@ int evaluateExpr(Expression *expr) {
             exit(EXIT_SUCCESS);
           } 
         } 
-        else if (expr->redirect.type == REDIR_OUT) {
+        else if (expr->redirect.type == REDIR_OUT && expr->redirect.fd != -1) {
           //fils fait la redirection 
           if (pid == 0) {
             //redirection de "output" pour ecrire a fileName, si le fichier a ecrire n'existe pas, le creer, s'il existe deja,
@@ -78,7 +78,7 @@ int evaluateExpr(Expression *expr) {
             exit(EXIT_SUCCESS);
           } 
         }
-        else if (expr->redirect.type == REDIR_APP) {
+        else if (expr->redirect.type == REDIR_APP && expr->redirect.fd != -1) {
           //fils fait la redirection 
           if (pid == 0) {
             //redirection de "output" pour ecrire a fileName, si le fichier a ecrire n'existe pas, le creer, s'il existe deja,
@@ -98,9 +98,60 @@ int evaluateExpr(Expression *expr) {
             exit(EXIT_SUCCESS);
           }
         }
-      }
-
-    
+        //On verifie si c'est &> ou &>>
+        else if (expr->redirect.fd == -1) {
+          //&>
+          if (expr->redirect.type == REDIR_OUT) {
+            //fils fait la redirection
+            if (pid == 0) {
+            //redirection de "output et stderr" pour ecrire a fileName, si le fichier a ecrire n'existe pas, le creer, s'il existe deja,
+            //effacer son contenu
+              int fd_to_redirect = open(expr->redirect.fileName, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+              if (fd_to_redirect < 0) {
+                perror("open");
+              } 
+              if (dup2(fd_to_redirect, STDOUT_FILENO) < 0) {
+                perror("dup2");
+                close(fd_to_redirect);
+                exit(EXIT_FAILURE);
+              };
+              if (dup2(fd_to_redirect, STDERR_FILENO) < 0) {
+                perror("dup2");
+                close(fd_to_redirect);
+                exit(EXIT_FAILURE);
+              };
+              close(fd_to_redirect);
+              //execute la commande avec "output" redirecté et l'expression a gauche de >> comme argument
+              evaluateExpr(expr->left);
+              exit(EXIT_SUCCESS);
+            }
+          } else if (expr->redirect.type == REDIR_APP) {
+              //fils fait la redirection
+              if (pid == 0) {
+              //redirection de "output et stderr" pour ecrire a fileName, si le fichier a ecrire n'existe pas, le creer, s'il existe deja,
+              //effacer son contenu
+              int fd_to_redirect = open(expr->redirect.fileName, O_WRONLY | O_CREAT | O_APPEND, 0644);
+              if (fd_to_redirect < 0) {
+                perror("open");
+              } 
+              if (dup2(fd_to_redirect, STDOUT_FILENO) < 0) {
+                perror("dup2");
+                close(fd_to_redirect);
+                exit(EXIT_FAILURE);
+              };
+              if (dup2(fd_to_redirect, STDERR_FILENO) < 0) {
+                perror("dup2");
+                close(fd_to_redirect);
+                exit(EXIT_FAILURE);
+              };
+              close(fd_to_redirect);
+              //execute la commande avec "output" redirecté et l'expression a gauche de >> comme argument
+              evaluateExpr(expr->left);
+              exit(EXIT_SUCCESS);
+            }
+          }
+        }
+      }    
   }
   //executer une commande externe simple donc le type d'expr est ET_SIMPLE
   if (expr->type == ET_SIMPLE) {
