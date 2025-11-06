@@ -185,5 +185,33 @@ int evaluateExpr(Expression *expr) {
     }
     return shellStatus;
   }
+  //Pour executer une sequence non conditionnelle, il faut evaluer la gauche et la droite de la sequence comme ils sont des commandes
+  if (expr->type == ET_SEQUENCE) {
+    evaluateExpr(expr->left);
+    evaluateExpr(expr->right);
+  }
+  //Si l'operateur est OR, Il faut tester si la commande a gauche est execute sans probleme, si c'est pas le cas, il faut executer la commande a droite
+  if (expr->type == ET_SEQUENCE_OR) {
+    //Il faut tester si la valeur du retour est 0 (pas d'erreur)
+    int status;
+    status = evaluateExpr(expr->left);
+    //Code d'erreur si c'est different de 0
+    if (status != 0) {
+      evaluateExpr(expr->right);
+    }
+  }
+  //Si l'operateur est AND, 
+  //Il faut tester si la commande a gauche est execute sans probleme, si c'est le cas, il faut executer la commande a droite
+  //Si la commande a gauche peut executer sans probleme, meme si la deuxieme cmd n'est pas valide, il faut executer la commande (d'après la simulation que j'ai fait sur
+  //un shell)
+  if (expr->type == ET_SEQUENCE_AND) {
+    //Il faut tester si la valeur du retour est 0 (pas d'erreur)
+    int status;
+    status = evaluateExpr(expr->left);
+    //Si et seuelement si la cmd a gauche est bon
+    if (status == 0) {
+      evaluateExpr(expr->right);
+    }
+  }
   return 0;
 }
