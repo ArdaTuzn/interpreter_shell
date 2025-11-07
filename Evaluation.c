@@ -213,60 +213,81 @@ int evaluateExpr(Expression *expr) {
       evaluateExpr(expr->right);
     }
   }
+  //Pipeline de plusieurs commandes, pour cela, d'abord, on va caluler le nombre de pipes pour creer le tableau qu'on va les stocker
   if (expr->type == ET_PIPE) {
-    //Il faut faire : le "output" de la cmd à gauche sera le "input" de la cmd à droite
-    //Comme il faut fait des redirections est on a besoin de 2 fils (fork) pour réaliser, 
-    //On ne peut pas appeler evaluateExpr(); comme précèdent
-    int status;
-    //premier arg sera la commande et la reste sera liste d'args pour les commandes dont on va redirecter output et input
-    char * cmd_in = expr->left->argv[0];
-    char * cmd_out = expr->right->argv[0];
-    //stocker l'adresse de argv[0] pour l'utiliser en execvp
-    char ** listArgs_in = &expr->left->argv[0];
-    char ** listArgs_out = &expr->right->argv[0];
-    //Il faut conserver le shell donc il faut creer 2 processus fils
-    pid_t pid_in;
-    pid_t pid_out;
-    int fd[2];
-    //On crée la pipe avant les créations des fils
-    pipe(fd);
-    int status1;
-    int status2;
-
-    if ((pid_in = fork()) < 0) {
-      perror("fork");
-      exit(EXIT_FAILURE);
-    } else if (pid_in > 0) {
-      //processus pere cree la deuxieme fils
-      if ((pid_out = fork()) < 0) {
-        perror("fork");
-        exit(EXIT_FAILURE);
-      }
-      //processus fils pid_out
-      if (pid_out == 0) {
-        dup2(fd[0], STDIN_FILENO);
-        close(fd[0]);
-        close(fd[1]);
-        execvp(cmd_out, listArgs_out);
-        fprintf(stderr, "exec error\n"); //Ajouter le cas d'erreur apres execvp 
-        exit(EXIT_FAILURE);
-      } //Processus pere
-      else {
-        close(fd[1]);
-        close(fd[0]);
-        waitpid(pid_in,&status1,0);
-        waitpid(pid_out,&status2,0);
-        exit(EXIT_SUCCESS);
-      }
-    } //processus fils pid_in
-    else {
-      dup2(fd[1],STDOUT_FILENO);
-      close(fd[1]);
-      close(fd[0]);
-      execvp(cmd_in, listArgs_in);
-      fprintf(stderr, "exec error\n"); //Ajouter le cas d'erreur apres execvp 
-      exit(EXIT_FAILURE);
+    //cpt sera le nombre de pipe a creer
+    int cpt = 0;
+    Expression *cur = expr;
+    while (cur && cur->type == ET_PIPE) {
+      cpt = cpt+1;
+      cur = cur->left;
     }
+    //Tableau a 2 dimensions car il faut qu'on stocke cpt pipes
+    int fd[cpt][2];
+    //Il y'aura cpt+1 commandes pour cpt pipes
+    Expression *cmds[cpt+1];
+    //Il faut conserver le shell donc il faut creer cpt+1 processus fils (chaque iteration)
+    pid_t pids[cpt+1];
+    int status[cpt+1];
+
+    //Creation des pipes
+    for (int i=0; i<cpt; i++) {
+      pipe(fd[i]);
+    }
+    //On part de la racine
+    cur = expr;
+    //On recupere les commandes sauf le premier (le plus a gauche)
+    for (int i = cpt; i >= 1; i--) {
+      cmds[i] = cur->right;     //la commande située à droite du pipe courant
+      cur = cur->left;          //vers la gauche
+    }
+    //On ajoute la toute premiere commande (la plus a gauche)
+    cmds[0] = cur;
+    //On cree les fils
+    for (int i = 0; i <= cpt; i++) {
+      pid_t pid;
+      if ((pid = fork()) < 0) {        
+        perror("fork");
+      }
+      if (pid == 0) {
+        //Une expr peut etre connecte a 2 pipes differentes comme c'est une chaine
+        if (i>0) {
+          dup2(fd[i-1][0], STDIN_FILENO);
+        } 
+        if (i < cpt) {
+          dup2(fd[i][1], STDOUT_FILENO);
+        }
+        //On ferme les extremites
+        for (int i = 0; i < cpt; i++) {
+          close(fd[i][0]);
+          close(fd[i][1]);
+        }
+        //execution de commande
+        execvp(cmds[i]->argv[0], cmds[i]->argv);
+        perror("execvp");
+      } //pere
+      else {
+        //pour utiliser dans waitpid
+        pids[i] = pid;
+      } 
+
+    }
+    for (int i = 0; i < cpt; i++) {
+      close(fd[i][0]);
+      close(fd[i][1]);
+    }
+    for (int i = 0; i <= cpt; i++) {
+      if (waitpid(pids[i], &status[i], 0) != pids[i]) {
+        perror("waitpid");
+      }
+    }
+    int last = status[cpt];
+    if (WIFEXITED(last)) {
+      shellStatus = WEXITSTATUS(last);
+    } else {  
+      shellStatus = 1;
+    }
+    return shellStatus;
   }
   return 0;
 }
