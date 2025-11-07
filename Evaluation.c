@@ -213,5 +213,60 @@ int evaluateExpr(Expression *expr) {
       evaluateExpr(expr->right);
     }
   }
+  if (expr->type == ET_PIPE) {
+    //Il faut faire : le "output" de la cmd à gauche sera le "input" de la cmd à droite
+    //Comme il faut fait des redirections est on a besoin de 2 fils (fork) pour réaliser, 
+    //On ne peut pas appeler evaluateExpr(); comme précèdent
+    int status;
+    //premier arg sera la commande et la reste sera liste d'args pour les commandes dont on va redirecter output et input
+    char * cmd_in = expr->left->argv[0];
+    char * cmd_out = expr->right->argv[0];
+    //stocker l'adresse de argv[0] pour l'utiliser en execvp
+    char ** listArgs_in = &expr->left->argv[0];
+    char ** listArgs_out = &expr->right->argv[0];
+    //Il faut conserver le shell donc il faut creer 2 processus fils
+    pid_t pid_in;
+    pid_t pid_out;
+    int fd[2];
+    //On crée la pipe avant les créations des fils
+    pipe(fd);
+    int status1;
+    int status2;
+
+    if ((pid_in = fork()) < 0) {
+      perror("fork");
+      exit(EXIT_FAILURE);
+    } else if (pid_in > 0) {
+      //processus pere cree la deuxieme fils
+      if ((pid_out = fork()) < 0) {
+        perror("fork");
+        exit(EXIT_FAILURE);
+      }
+      //processus fils pid_out
+      if (pid_out == 0) {
+        dup2(fd[0], STDIN_FILENO);
+        close(fd[0]);
+        close(fd[1]);
+        execvp(cmd_out, listArgs_out);
+        fprintf(stderr, "exec error\n"); //Ajouter le cas d'erreur apres execvp 
+        exit(EXIT_FAILURE);
+      } //Processus pere
+      else {
+        close(fd[1]);
+        close(fd[0]);
+        waitpid(pid_in,&status1,0);
+        waitpid(pid_out,&status2,0);
+        exit(EXIT_SUCCESS);
+      }
+    } //processus fils pid_in
+    else {
+      dup2(fd[1],STDOUT_FILENO);
+      close(fd[1]);
+      close(fd[0]);
+      execvp(cmd_in, listArgs_in);
+      fprintf(stderr, "exec error\n"); //Ajouter le cas d'erreur apres execvp 
+      exit(EXIT_FAILURE);
+    }
+  }
   return 0;
 }
